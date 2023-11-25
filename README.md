@@ -91,6 +91,11 @@ or prohibited.
 Presumably it is a high/low voltage to indicate either of these states, however
 further investigation is needed.
 
+u/Tool_Scientist recorded a whole charge cycle and found a relationship between
+the charging current and the voltage on this pin:
+
+    Ichg = 28.9 - 7.7 * Vcs
+
 ## Electrical Protocol
 
 The communication protocol is based on the UART standard, operating at
