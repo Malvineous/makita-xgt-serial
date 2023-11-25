@@ -69,9 +69,12 @@ or whether they generate that off the 40V rails.
 
 ### DT: Detection
 
-The exact working of this pin is currently unclear, but it appears to contain
-a particular voltage that varies depending on the state of the battery and
-whether it is connected to a charger or not.
+This pin is used to detect whether a battery is present.  A fully charged
+battery outputs around 34.3 V on this pin.
+
+A DC40RA rapid charger will not attempt communication unless some voltage is
+present on this pin.  Voltages as low as 3.3 V are enough to trigger a charger
+to start communication.
 
 Further investigation is necessary.  There is some explanation on page 5 of the
 patent document.
@@ -99,15 +102,20 @@ the charging current and the voltage on this pin:
 ## Electrical Protocol
 
 The communication protocol is based on the UART standard, operating at
-9600/8-N-1.  Unlike UART, there are no separate TX and RX lines, there is only
-one single TR line, which is referenced to battery negative.  The TR line is
-normally at 0V and receives +5V pulses as bits are transmitted.
+9600/8-E-1 (9600 bps, 8 data bits, even parity bit, 1 stop bit).  This is the
+same as most TTL UART schemes just with even parity instead of no parity.
+Unlike UART, there are no separate TX and RX lines, there is only one single TR
+line that handles communication in both directions, and which is referenced to
+battery negative.  The TR line is normally at 0V and receives +5V pulses as bits
+are transmitted.
 
 Normal UART idles at a high voltage level (3.3V or 5V) and when a zero-bit is
 sent, the voltage drops to 0V for (in the case of 9600 bps) 104 microseconds
 for each 0 bit.  There is an extra zero-bit (low) at the start of each byte
-transmitted called a "start bit", and after the eighth data bit is sent, a final
-one-bit (high) is sent as a "stop bit".
+transmitted called a "start bit", and after the eighth data bit is sent, the
+parity bit is sent followed by a final one-bit (high) as a "stop bit".  As the
+bus idles high and the start bit is a low, this high-to-low transition is used
+to trigger the asynchronous reception of an incoming bit on the receiver side.
 
 This design means only one device can transmit at a time, as the bus is held
 high when idle.  To address this, Makita have inverted the voltage signals so
@@ -186,14 +194,14 @@ bytes.
 
 ### Word 1: Message Length
 
- * bits 0..3 - number of 0xFF padding bytes (0-7) at end of message
- * bit 4 - if set, add 16 bytes (8 words) to expected message length
- * bit 5 - if set, add 32 bytes (16 words) to expected message length
- * bit 6 - if set, add 64 bytes (32 words) to expected message length
+ * bits 0..3 - number of 0xFF padding bytes (0-15) at end of message
+ * bit 4 - if set, add 16 bytes (8 words) to the expected message length
+ * bit 5 - if set, add 32 bytes (16 words) to the expected message length
+ * bit 6 - if set, add 64 bytes (32 words) to the expected message length
  * bit 7 - not yet observed, could be +128 bytes
  * bits 8..15 - unused? Always seems to be zero.
 
-Default message length is 16 bytes.  If bits 5 and 6 are set, message will be
+The default message length is 16 bytes.  If bits 5 and 6 are set, message will be
 16 + 32 + 64 = 112 bytes.
 
 ### Word 2: Message ID
@@ -282,7 +290,7 @@ Example:
       2105 0A21 063C  // Parameter 0x2105 is 2593 and 1596, or 169936444
       2107 0521 0814  // Parameter 0x2107 is 1313 and 2068, or 86050836
       2109 0000       // Parameter 0x2109 is 0
-      210C E2D0       // Parameter 0x210C is 58064
+      210C E2D0       // Parameter 0x210C is 58064, seems like random ID for each charging session (76F1, 1FE7, BD3E, etc.)
       07D7            // Checksum
       FFFF FFFF FFFF  // Padding
 
