@@ -45,6 +45,15 @@ briefly connected to the battery's DT pin.  The implications of this, and
 whether it requires special handling, are currently unknown (e.g. does voltage
 on the DS pin trigger a start bit in the UART on the DT pin?)
 
+Electrically speaking it could be possible for up to 42 volts DC to appear on
+any of these pins, so you should design your circuit to be tolerant of these
+voltages.  During testing, the TR pin never went above 5 V on an official
+Makita battery, but it did reach 33 V on a Chinese clone brand.  If you measure
+the voltage on the TR pin first and verify it is below 5 V then you should be
+fine while prototyping, however if you are designing a circuit that could be
+used without someone testing the TR voltage first, then your design should be
+40 volt tolerant.
+
 ### DS/WK: Discharge/Wake
 
 This pin outputs a signal indicating whether the battery is safe to be
@@ -227,7 +236,9 @@ Always 0x4D4C.
 
 ### Word 4: Unknown
 
-Always 0x00CC.
+Always 0x00CC from a charger, and 0x000C from currently tested tools.
+
+The battery always seems to include the same value in its response.
 
 ### Word 5: Command
 
@@ -300,9 +311,32 @@ Example response:
       B200 0000       // Response command and empty length
       02A9            // Checksum
 
+#### 1300 - response B300
+
+Announce parameters unsolicited, from a tool when battery is first connected.
+
+    A5A5 002C 5001 4D4C 000C
+      1300 0014       // Command and data length
+      3101 1234
+      3102 5678
+      3103 9ABC
+      3105 CC6D
+      3106 0000
+      05F2            // Checksum
+      FFFF FFFF FFFF FFFF FFFF FFFF
+
+Example response:
+
+    A5A5 0000 9001 4D4C 000C
+      B300 0000       // Response command and empty length
+      01E9            // Checksum
+
+Does a B response indicate the battery has recorded that a tool has been
+connected?
+
 #### 1201 (length (0x18) - response 3201, length 0x38
 
-Read multiple parameters?
+Read multiple parameters?  Sent from a charger to a battery.
 
 Example:
 
@@ -333,6 +367,34 @@ Example response:
       0AD6            // Checksum
       FFFF FFFF FFFF  // Padding
       FFFF
+
+#### 1302, response 3302
+
+Read multiple parameters?  Send from a blower tool to a battery.
+
+    A5A5 002C 5002 4D4C 000C
+      1302 0014       // Commmand and data length
+      0003 0008       // Array of length 8
+      1301 1306 1307 130C 130D 130E 130F 1310
+      0243            // Checksum
+      FFFF FFFF FFFF FFFF FFFF FFFF
+
+Example response:
+
+    A5A5 006F 9002 4D4C 000C
+      3302 0051       // Response command and data length, odd number due to one param only being a single byte
+      0001 0000       // List of indeterminate length?
+      1301 FFFF
+      1306 0E2E
+      1307 09C4
+      130C 58         // Only one byte!
+      130D 05B3
+      130E 12A0 2C04
+      130F 0029 3200 6C78 6299 591B 53B3 4957 4181 3D98 31E0 31E0 0029 3200 6C78 664F 621E 53B3 4957 4181 3D98 31E0 31E0 0D02
+      1310 0000
+      1801            // Checksum
+      FF              // Single padding byte!
+      FFFF FFFF FFFF FFFF FFFF FFFF FFFF
 
 #### 1203 (length 0xE), response 3203 (length 0x17)
 
@@ -381,6 +443,32 @@ Example response:
       B204 0000       // Response command and empty length
       02B2            // Checksum
 
+Command response beginning with B might confirm a successful write to the
+battery's memory.
+
+#### 1304, response 3304
+
+    A5A5 002E 5003 4D4C 000C
+      1304 0012
+      0003 0007
+      1302 1303 1304 1308 1309 130A 1311
+      0213
+      FFFF FFFF FFFF FFFF FFFF FFFF FFFF
+
+Example response:
+
+    A5A5 0020 9003 4D4C 000C
+      3304 0020
+      0001 0000
+      1302 0000
+      1303 0001
+      1304 6380
+      1308 0BC7
+      1309 6400
+      130A 6400
+      1311 0BC7
+      05BA            // Checksum
+
 #### 1205 (length 0xA) - response 3205, length 0x10
 
 Read multiple parameters?
@@ -422,6 +510,47 @@ Example response:
     A5A5 0000 9005 4D4C 00CC
       B206 0000       // Response command and empty length
       02B2            // Checksum
+
+#### 1306 - response B306
+
+Sent from a tool to a battery.
+
+Not sure what the purpose of this is, unless the battery can refuse to operate
+certain tool models, or the battery is recording the tools it has recently been
+used with, perhaps to assist diagnosis of returned batteries under warranty.
+
+    A5A5 0016 5004 4D4C 000C
+      1306 000A       // Command and length
+      3104 2020 4731 3030 5341  // "  G100SA" -> AS001G tool model, reversed
+      0313            // Checksum
+      FFFF FFFF FFFF
+
+Example response:
+
+    A5A5 0000 9004 4D4C 000C
+      B306 0000       // Command and length
+      01F2            // Checksum
+
+#### 1307 - response 3307
+
+Read parameters, sent from a tool to a battery.
+
+    A5A5 001A 5005 4D4C 000C
+      1307 0006       // Command and length
+      0003 0001       // Array of one item
+      130B            // 130B = battery model
+      0156            // Checksum
+      FFFF FFFF FFFF
+      FFFF FFFF
+
+Example response:
+
+    A5A5 0012 9005 4D4C 000C
+      3307 000E
+      0001 0000
+      130B 2046 3035 3034 4C42  // " F0504LB" -> BL4050F battery model, reversed
+      0370
+      FFFF
 
 #### 120C (length 4) - response B20C, length 0
 
@@ -465,6 +594,11 @@ Example response:
       120D 0D84       // Parameter 0x120D is 3460
       032A            // Checksum
       FFFF FFFF       // Padding
+
+#### Command notes
+
+* Commands starting with 0xBxxx seem to be acknowledgements that something has
+  been written to the battery's memory.
 
 # Credits
 
