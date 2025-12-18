@@ -448,6 +448,8 @@ battery's memory.
 
 #### 1304, response 3304
 
+Read multiple parameters?
+
     A5A5 002E 5003 4D4C 000C
       1304 0012
       0003 0007
@@ -468,6 +470,12 @@ Example response:
       130A 6400
       1311 0BC7
       05BA            // Checksum
+
+In this response 1303 has a value of 0001.  @46cv8 found that if a battery
+returns 0040 here, then the tool flashes red and won't operate.  In that case
+it was due to a battery balancing issue, however it is unknown whether 0040
+is an error code specifically for a balancing problem, or if it's a generic
+fault code to prevent the tool from operating.
 
 #### 1205 (length 0xA) - response 3205, length 0x10
 
